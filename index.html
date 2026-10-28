@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>도서관 대출 시스템</title>
+<!-- ⭐ 대출 규칙은 이 웹에 만들지 않습니다. 브라우저 안에서 파이썬(Pyodide)을 돌려 solution.py를 그대로 불러 씁니다. -->
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"></script>
+<style>
+  :root { --bg:#f6f4ef; --card:#fff; --ink:#1f2328; --sub:#6b7280; --line:#e5e1d8; --accent:#2f5d50; --ok:#1e7f4f; --bad:#c62828; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif; }
+  .wrap { max-width:560px; margin:0 auto; padding:24px 16px 48px; }
+  h1 { font-size:24px; margin:0 0 4px; }
+  .sub { color:var(--sub); font-size:14px; margin-bottom:20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
+  .card h2 { font-size:17px; margin:0 0 12px; }
+  .row { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+  .row.one { grid-template-columns:1fr; }
+  label { font-size:12px; color:var(--sub); display:block; margin-bottom:4px; }
+  input { width:100%; padding:10px; font-size:16px; border:1px solid var(--line); border-radius:8px; }
+  button { margin-top:10px; width:100%; padding:12px; font-size:16px; font-weight:700; color:#fff; background:var(--accent); border:0; border-radius:8px; cursor:pointer; }
+  button:disabled { opacity:.5; }
+  .result { margin-top:12px; }
+  .ok { background:#e7f5ee; color:var(--ok); border:2px solid var(--ok); border-radius:8px; padding:12px; font-size:18px; font-weight:700; text-align:center; }
+  .bad { background:var(--bad); color:#fff; border-radius:8px; padding:14px; font-size:28px; font-weight:800; text-align:center; }
+  table { width:100%; border-collapse:collapse; margin-top:8px; }
+  th, td { padding:8px; border-bottom:1px solid var(--line); text-align:left; }
+  .muted { color:var(--sub); }
+  #status { font-size:13px; color:var(--sub); margin-bottom:12px; }
+  .reset { background:#888; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📚 도서관 대출 시스템</h1>
+  <div class="sub">책: B001 · B002 · B003 · B004 · B005 / 대출 기간 14일 / 1인 3권까지</div>
+  <div id="status">파이썬 불러오는 중… (처음엔 몇 초 걸려요)</div>
+
+  <div class="card">
+    <h2>대출</h2>
+    <div class="row">
+      <div><label>책 번호</label><input id="bBook" placeholder="B001"></div>
+      <div><label>이름</label><input id="bName" placeholder="김민수"></div>
+      <div><label>며칠째</label><input id="bDay" placeholder="1" inputmode="decimal"></div>
+    </div>
+    <button id="bBtn" disabled>대출하기</button>
+    <div class="result" id="bRes"></div>
+  </div>
+
+  <div class="card">
+    <h2>반납</h2>
+    <div class="row">
+      <div><label>책 번호</label><input id="rBook" placeholder="B001"></div>
+      <div><label>이름</label><input id="rName" placeholder="김민수"></div>
+      <div><label>며칠째</label><input id="rDay" placeholder="10" inputmode="decimal"></div>
+    </div>
+    <button id="rBtn" disabled>반납하기</button>
+    <div class="result" id="rRes"></div>
+  </div>
+
+  <div class="card">
+    <h2>대출 목록</h2>
+    <div class="row one">
+      <div><label>이름</label><input id="lName" placeholder="김민수"></div>
+    </div>
+    <button id="lBtn" disabled>대출 목록 보기</button>
+    <div class="result" id="lRes"></div>
+  </div>
+
+  <button id="resetBtn" class="reset" disabled>처음 상태로 초기화</button>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let py;
+
+async function main() {
+  py = await loadPyodide();
+  // solution.py 파일을 그대로 가져와서 실행
+  const code = await (await fetch("solution.py?v=" + Date.now())).text();
+  py.FS.writeFile("solution.py", code);
+  py.runPython(`
+from solution import LibraryLoan
+lib = LibraryLoan()
+
+def to_day(text):
+    text = text.strip()
+    try:
+        return int(text)
+    except ValueError:
+        try:
+            return float(text)   # 2.5 같은 값도 그대로 넘겨 solution.py가 판단
+        except ValueError:
+            return text
+
+def web_borrow(b, n, d):
+    return lib.borrow(b.strip(), n.strip(), to_day(d))
+
+def web_return(b, n, d):
+    return lib.return_book(b.strip(), n.strip(), to_day(d))
+
+def web_loans(n):
+    return [list(t) for t in lib.get_loans(n.strip())]
+
+def web_reset():
+    global lib
+    lib = LibraryLoan()
+`);
+  $("status").textContent = "준비 완료 ✓ (solution.py 사용 중)";
+  document.querySelectorAll("button").forEach(b => b.disabled = false);
+}
+
+$("bBtn").onclick = () => {
+  const ok = py.globals.get("web_borrow")($("bBook").value, $("bName").value, $("bDay").value);
+  $("bRes").innerHTML = ok
+    ? `<div class="ok">✅ 성공 — ${esc($("bName").value.trim())}님이 ${esc($("bBook").value.trim())} 대출</div>`
+    : `<div class="bad">❌ 실패</div>`;
+};
+
+$("rBtn").onclick = () => {
+  const late = py.globals.get("web_return")($("rBook").value, $("rName").value, $("rDay").value);
+  $("rRes").innerHTML = late === -1
+    ? `<div class="bad">❌ 실패</div>`
+    : `<div class="ok">✅ 반납 성공 — 연체 ${late}일</div>`;
+};
+
+$("lBtn").onclick = () => {
+  const loans = py.globals.get("web_loans")($("lName").value).toJs();
+  $("lRes").innerHTML = loans.length === 0
+    ? `<p class="muted">빌린 책이 없습니다.</p>`
+    : `<table><tr><th>책 번호</th><th>반납 기한</th></tr>` +
+      loans.map(([b, due]) => `<tr><td>${esc(b)}</td><td>${due}일째까지</td></tr>`).join("") +
+      `</table>`;
+};
+
+$("resetBtn").onclick = () => {
+  py.globals.get("web_reset")();
+  ["bRes","rRes","lRes"].forEach(id => $(id).innerHTML = "");
+  $("status").textContent = "처음 상태로 초기화했습니다 ✓";
+};
+
+main().catch(e => { $("status").textContent = "불러오기 실패: " + e; });
+</script>
+</body>
+</html>
